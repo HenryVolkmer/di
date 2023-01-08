@@ -66,6 +66,9 @@ func (this *Container) Has(id string) bool {
 }
 
 func (this *Container) Add(id string, definition any) {
+    if reflect.TypeOf(definition).Kind() != reflect.Pointer {
+        panic(fmt.Sprintf("[%s] Unsupported Type! Please declare your Services as Pointer-Structs!",id))
+    }
     this.Defs[id] = definition
 }
 
@@ -75,21 +78,18 @@ func (this *Container) build(id string) any {
     // var t reflect.Type
     definition,ok = this.Defs[id]
     if !ok {
-        panic(fmt.Sprintf("No Definition for id %s found!", id))
+        panic(fmt.Sprintf("Definition '%s' not found!", id))
     }
+    rtype := reflect.TypeOf(definition)
+    var vf []reflect.StructField
+    vf = reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(definition).Elem().Interface()))
 
-    var t reflect.Type
-    t = reflect.TypeOf(reflect.ValueOf(definition).Elem().Interface())
-    if t.Kind() != reflect.Struct {
-        panic(fmt.Sprintf("no struct, is %#v",t.Kind()))
-    }
-
-    for _, field := range reflect.VisibleFields(t) {
+    for _, field := range vf {
 
         // Inject a service
         if serviceVal, ok := field.Tag.Lookup("service"); ok {
             if serviceVal == "" {
-                panic(fmt.Sprintf("service-Tag must not be empty for %s/%s::%s",t.PkgPath(),t.Name(),field.Name))
+                panic(fmt.Sprintf("service-Tag must not be empty for %s/%s::%s",rtype.PkgPath(),rtype.Name(),field.Name))
             }
             reflect.ValueOf(definition).Elem().FieldByName(field.Name).Set(reflect.ValueOf(this.Get(serviceVal)))
         }
@@ -97,7 +97,7 @@ func (this *Container) build(id string) any {
         // inject a param
         if serviceVal, ok := field.Tag.Lookup("serviceparam"); ok {
             if serviceVal == "" {
-                panic(fmt.Sprintf("serviceparam-Tag must not be empty for %s/%s::%s",t.PkgPath(),t.Name(),field.Name))
+                panic(fmt.Sprintf("serviceparam-Tag must not be empty for %s/%s::%s",rtype.PkgPath(),rtype.Name(),field.Name))
             }
             param, exists := this.ParameterBag.Get(serviceVal)
             if !exists {
