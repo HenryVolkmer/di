@@ -3,6 +3,7 @@ package di
 import (
     "fmt"
     "reflect"
+    "strings"
 )
 
 type ContainerInterface interface {
@@ -32,19 +33,22 @@ type ContainerInterface interface {
 }
 
 type Container struct {
-    // Hold Service-Parameters
+    // Holds Service-Parameters
     ParameterBag *ParameterBag
     // Holds compiled Services with all Deps
-    Services map[string]any
-    // Holds Structs with Struct-Tags defining the Service and Deps
-    Defs map[string]any
+    Instances map[string]any
+    //  Storage of object definitions.
+    Definitions map[string]any
+    // Used to collect IDs of objects instantiated during build to detect circular references.
+    Building map[any]bool
 }
 
 func NewContainer() *Container {
     container := &Container{}
     container.ParameterBag = NewParameterBag()
-    container.Services = make(map[string]any)
-    container.Defs = make(map[string]any) 
+    container.Instances = make(map[string]any)
+    container.Definitions = make(map[string]any) 
+    container.Building = make(map[any]bool)
     return container
 }
 
@@ -53,15 +57,25 @@ func (this *Container) AddParameter(name string, value string) {
 }
 
 func (this *Container) Get(id string) any {
-    _, ok := this.Services[id]
+    _, ok := this.Instances[id]
     if !ok {
-       this.Services[id] = this.build(id)
+       this.Instances[id] = this.build(this.getDefinition(id))
     }
-    return this.Services[id]
+    return this.Instances[id]
+}
+
+func (this *Container) getDefinition(id string) any {
+    var definition any
+    var ok bool
+    definition,ok = this.Definitions[id]
+    if !ok {
+        panic(fmt.Sprintf("Definition '%s' not found!", id))
+    }
+    return definition
 }
 
 func (this *Container) Has(id string) bool {
-    _,ok := this.Services[id]
+    _,ok := this.Instances[id]
     return ok
 }
 
@@ -69,23 +83,23 @@ func (this *Container) Add(id string, definition any) {
     if reflect.TypeOf(definition).Kind() != reflect.Pointer {
         panic(fmt.Sprintf("[%s] Unsupported Type! Please declare your Services as Pointer-Structs!",id))
     }
-    this.Defs[id] = definition
+    this.Definitions[id] = definition
 }
 
-func (this *Container) build(id string) any {
-    var definition any
-    var ok bool
-    // var t reflect.Type
-    definition,ok = this.Defs[id]
-    if !ok {
-        panic(fmt.Sprintf("Definition '%s' not found!", id))
-    }
+func (this *Container) build(definition any) any {
     rtype := reflect.TypeOf(definition)
+    if _,allreadyBuilding := this.Building[definition]; allreadyBuilding {
+        var builds []string 
+        for defInBuild,_ := range this.Building {
+            builds = append(builds,fmt.Sprintf("%#v",defInBuild))
+        }
+        panic(fmt.Sprintf(`Circular reference to %s detected while building: %s.`,rtype,strings.Join(builds,",")))
+    }
+    this.Building[definition] = true
     var vf []reflect.StructField
     vf = reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(definition).Elem().Interface()))
 
     for _, field := range vf {
-
         // Inject a service
         if serviceVal, ok := field.Tag.Lookup("service"); ok {
             if serviceVal == "" {
@@ -93,7 +107,6 @@ func (this *Container) build(id string) any {
             }
             reflect.ValueOf(definition).Elem().FieldByName(field.Name).Set(reflect.ValueOf(this.Get(serviceVal)))
         }
-
         // inject a param
         if serviceVal, ok := field.Tag.Lookup("serviceparam"); ok {
             if serviceVal == "" {
