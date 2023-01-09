@@ -24,14 +24,14 @@ go get github.com/HenryVolkmer/di
 
 ### Struct Tags
 
-The Tag `service:"service_alias"` Tag a Structs Field as Dependency which will be injected by the Container.
+The Tag `service:"service_alias"` tags a Structs Field as Dependency which will be injected by the Container.
 In order to inject Serviceparameters, tag your Field with `serviceparam:"param_id"`.
 
 ```golang
 type Controller struct {
     // this injects a Service "my.logger"
     Logger *Logger `service:"my.logger"`
-    // this injects a Parameter "dbuser"
+    // this injects a Parameter "logfile"
     Logfile string `serviceparam:"logfile"`
 }
 ```
