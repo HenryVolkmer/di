@@ -33,41 +33,59 @@ type ContainerInterface interface {
 }
 
 type Container struct {
+    Compiled bool
     // Holds Service-Parameters
     ParameterBag *ParameterBag
     // Holds compiled Services with all Deps
     Instances map[string]any
     //  Storage of object definitions.
-    Definitions map[string]any
+    Definitions map[string]*Definition
     // Used to collect IDs of objects instantiated during build to detect circular references.
     Building map[any]bool
+    // Tags
+    TaggedServices map[string][]string
 }
 
 func NewContainer() *Container {
     container := &Container{}
+    container.Compiled = false
     container.ParameterBag = NewParameterBag()
     container.Instances = make(map[string]any)
-    container.Definitions = make(map[string]any) 
+    container.Definitions = make(map[string]*Definition) 
     container.Building = make(map[any]bool)
+    container.TaggedServices = make(map[string][]string)
     return container
 }
 
 func (this *Container) AddParameter(name string, value string) {
+
+    if this.Compiled {
+        panic("Container is allready compiled, you cant add Parameters anymore!")
+    }
+
     this.ParameterBag.Set(name,value)
 }
 
 func (this *Container) Get(id string) any {
-    _, ok := this.Instances[id]
-    if !ok {
-       this.Instances[id] = this.build(this.getDefinition(id))
-    }
-    return this.Instances[id]
+    if !this.Compiled {
+        this.Compile()
+    }   
+    return this.getInternal(id)
 }
 
-func (this *Container) getDefinition(id string) any {
-    var definition any
-    var ok bool
-    definition,ok = this.Definitions[id]
+func (this *Container) getInternal(id string) any {
+    service,ok := this.Instances[id]
+    if !ok {
+        panic(fmt.Sprintf("Requested Service %s not found!",id))
+    }
+    return service
+}
+
+func (this *Container) getDefinition(id string) *Definition {
+    if this.Compiled {
+        panic("Container is allready compiled, you cant access Definitions anymore!")
+    }
+    definition,ok := this.Definitions[id]
     if !ok {
         panic(fmt.Sprintf("Definition '%s' not found!", id))
     }
@@ -75,29 +93,49 @@ func (this *Container) getDefinition(id string) any {
 }
 
 func (this *Container) Has(id string) bool {
+    if !this.Compiled {
+        this.Compile()
+    }
     _,ok := this.Instances[id]
     return ok
 }
 
-func (this *Container) Add(id string, definition any) {
-    if reflect.TypeOf(definition).Kind() != reflect.Pointer {
+func (this *Container) Add(id string, service any) *Definition {
+    if this.Compiled {
+        panic("Container is allready compiled, you cant add services anymore!")
+    }
+    if reflect.TypeOf(service).Kind() != reflect.Pointer {
         panic(fmt.Sprintf("[%s] Unsupported Type! Please declare your Services as Pointer-Structs!",id))
     }
-    this.Definitions[id] = definition
+    this.Definitions[id] = &Definition{Id: id,Service: service}
+    return this.Definitions[id]
 }
 
-func (this *Container) build(definition any) any {
-    rtype := reflect.TypeOf(definition)
-    if _,allreadyBuilding := this.Building[definition]; allreadyBuilding {
+func (this *Container) Compile() {
+    for id,definition := range this.Definitions {
+        this.Instances[id] = this.build(definition)
+    }
+    this.Compiled = true
+}
+
+func (this *Container) build(def *Definition) any {
+    service := def.Service
+
+    for _,tag := range def.Tags {
+        this.registerTag(def.Id,tag)
+    }
+
+    rtype := reflect.TypeOf(service)
+    if _,allreadyBuilding := this.Building[service]; allreadyBuilding {
         var builds []string 
         for defInBuild,_ := range this.Building {
             builds = append(builds,fmt.Sprintf("%#v",defInBuild))
         }
         panic(fmt.Sprintf(`Circular reference to %s detected while building: %s.`,rtype,strings.Join(builds,",")))
     }
-    this.Building[definition] = true
+    this.Building[service] = true
     var vf []reflect.StructField
-    vf = reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(definition).Elem().Interface()))
+    vf = reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(service).Elem().Interface()))
 
     for _, field := range vf {
         // Inject a service
@@ -105,7 +143,8 @@ func (this *Container) build(definition any) any {
             if serviceVal == "" {
                 panic(fmt.Sprintf("service-Tag must not be empty for %s/%s::%s",rtype.PkgPath(),rtype.Name(),field.Name))
             }
-            reflect.ValueOf(definition).Elem().FieldByName(field.Name).Set(reflect.ValueOf(this.Get(serviceVal)))
+            dependService := this.getDefinition(serviceVal).Service
+            reflect.ValueOf(service).Elem().FieldByName(field.Name).Set(reflect.ValueOf(dependService))
         }
         // inject a param
         if serviceVal, ok := field.Tag.Lookup("serviceparam"); ok {
@@ -114,10 +153,26 @@ func (this *Container) build(definition any) any {
             }
             param, exists := this.ParameterBag.Get(serviceVal)
             if !exists {
-                panic(fmt.Sprintf("serviceparameter '%s' not found", param))
+                panic(fmt.Sprintf("serviceparameter '%s' not found! Make sure you have added Parameters!", param))
             }
-            reflect.ValueOf(definition).Elem().FieldByName(field.Name).Set(reflect.ValueOf(param))
+            reflect.ValueOf(service).Elem().FieldByName(field.Name).Set(reflect.ValueOf(param))
         }
     }
-    return definition
+    return service
+}
+
+func (this *Container) registerTag(id string, tag string) {
+    this.TaggedServices[tag] = append(this.TaggedServices[tag],id);
+}
+
+func (this *Container) GetTaggedServices(tag string) ([]any,bool) {
+    ids,exist := this.TaggedServices[tag]
+    if !exist {
+        return nil,false
+    }
+    var taggedServices []any
+    for _,id := range ids {
+        taggedServices = append(taggedServices,this.getInternal(id))
+    }
+    return taggedServices,true
 }

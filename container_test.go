@@ -19,11 +19,22 @@ type ServiceTwoFixture struct {
 }
 
 type ServiceThreeFixture struct {
+    Username string `serviceparam:"username"`
     ServiceFourFixture *ServiceFourFixture `service:"di/ServiceFourFixture"`
 }
 
 type ServiceFourFixture struct {
+    Password string `serviceparam:"password"`
     ServiceThreeFixture *ServiceThreeFixture `service:"di/ServiceThreeFixture"`
+}
+
+func TestCanBuild(t *testing.T) {
+    c := NewContainer()
+    c.AddParameter("username",USERNAME)
+    c.AddParameter("password",PASSWORD)
+    c.Add("di/ServiceOneFixture",&ServiceOneFixture{})
+    c.Add("di/ServiceTwoFixture",&ServiceTwoFixture{})
+    c.Compile()
 }
 
 func TestCanResolveServices(t *testing.T) {
@@ -33,18 +44,70 @@ func TestCanResolveServices(t *testing.T) {
     c.AddParameter("password","env(password)")
     c.Add("di/ServiceOneFixture",&ServiceOneFixture{})
     c.Add("di/ServiceTwoFixture",&ServiceTwoFixture{})
+    c.Compile()
     var s *ServiceOneFixture = c.Get("di/ServiceOneFixture").(*ServiceOneFixture)
     assertEquals(USERNAME, s.ServiceTwoFixture.Username, t) 
     assertEquals(PASSWORD, s.ServiceTwoFixture.Password, t)
 }
 
-func TestPanicAtCircularRecurstion(t *testing.T) {
+func TestCanResolveCircularRecurstion(t *testing.T) {
+    c := NewContainer()
+    c.AddParameter("username",USERNAME)
+    c.AddParameter("password",PASSWORD)
+    c.Add("di/ServiceThreeFixture",&ServiceThreeFixture{})
+    c.Add("di/ServiceFourFixture",&ServiceFourFixture{})
+    s := c.Get("di/ServiceThreeFixture").(*ServiceThreeFixture)
+    assertEquals(PASSWORD, s.ServiceFourFixture.Password, t)
+}
+
+func TestPanicAtMissingPrarameters(t *testing.T) {
     // turn off test-panics
-    defer func() { _ = recover() }()
+   defer func() { _ = recover() }()
     c := NewContainer()
     c.Add("di/ServiceThreeFixture",&ServiceThreeFixture{})
     c.Add("di/ServiceFourFixture",&ServiceFourFixture{})
     s := c.Get("di/ServiceThreeFixture").(*ServiceThreeFixture)
     assertEquals(fmt.Sprintf("%T",&ServiceThreeFixture{}),fmt.Sprintf("%T",s),t)
-    t.Errorf("did not panic on circular recurstion!")
+    t.Errorf("did not panic on Missing Parameters!")
+}
+
+func TestServiceCanBeTagged(t *testing.T) {
+
+    c := NewContainer()
+    c.AddParameter("username",USERNAME)
+    c.AddParameter("password",PASSWORD)
+    c.Add("di/ServiceOneFixture",&ServiceOneFixture{}).Tag("controllers")
+    c.Add("di/ServiceTwoFixture",&ServiceTwoFixture{}).Tag("controllers").Tag("bar")
+    c.Add("di/ServiceThreeFixture",&ServiceThreeFixture{}).Tag("foo")
+    c.Add("di/ServiceFourFixture",&ServiceFourFixture{})
+    c.Compile()
+
+    ctrls,ok := c.GetTaggedServices("controllers")
+    if !ok {
+        t.Errorf("Amount of Tagged controllers should be 2 but 0 found!")
+    }
+    if len(ctrls) != 2 {
+        t.Errorf("Amount of Tagged ctrls should be 2 but %d found!",len(ctrls))
+    }
+
+    bar,ok := c.GetTaggedServices("bar")
+    if !ok {
+        t.Errorf("Amount of Tagged bar should be 1 but 0 found!")
+    }    
+    if len(bar) != 1 {
+        t.Errorf("Amount of Tagged bar should be 1 but %d found!",len(bar))
+    }
+
+    foo,ok := c.GetTaggedServices("foo")
+    if !ok {
+        t.Errorf("Amount of Tagged foo should be 1 but 0 found!")
+    }
+    if len(foo) != 1 {
+        t.Errorf("Amount of Tagged foo should be 1 but %d found!",len(foo))
+    }
+            
+    baz,ok := c.GetTaggedServices("baz")
+    if baz != nil {
+        t.Errorf("Amount of Tagged baz should be 0 but %d found!",len(bar))
+    }
 }
