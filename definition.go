@@ -2,7 +2,7 @@ package di
 
 type Definition struct {
 	Id string
-	Service any
+	Service interface{}
 	Tags []string
 }
 

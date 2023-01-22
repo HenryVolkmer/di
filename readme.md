@@ -1,4 +1,6 @@
-Dependency Injection (DI) for the GO language
+[![Build Status](https://github.com/HenryVolkmer/di/workflows/Run%20Tests/badge.svg?branch=master)](https://github.com/HenryVolkmer/di/actions?query=branch%3Amaster)
+
+Dependency Injection (DI) for the GO language 
 =============================================
 
 Introduction
