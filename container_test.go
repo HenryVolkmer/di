@@ -106,7 +106,7 @@ func TestServiceCanBeTagged(t *testing.T) {
         t.Errorf("Amount of Tagged foo should be 1 but %d found!",len(foo))
     }
             
-    baz,ok := c.GetTaggedServices("baz")
+    baz,_ := c.GetTaggedServices("baz")
     if baz != nil {
         t.Errorf("Amount of Tagged baz should be 0 but %d found!",len(bar))
     }

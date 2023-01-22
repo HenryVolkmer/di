@@ -128,14 +128,13 @@ func (this *Container) build(def *Definition) any {
     rtype := reflect.TypeOf(service)
     if _,allreadyBuilding := this.Building[service]; allreadyBuilding {
         var builds []string 
-        for defInBuild,_ := range this.Building {
+        for defInBuild := range this.Building {
             builds = append(builds,fmt.Sprintf("%#v",defInBuild))
         }
         panic(fmt.Sprintf(`Circular reference to %s detected while building: %s.`,rtype,strings.Join(builds,",")))
     }
     this.Building[service] = true
-    var vf []reflect.StructField
-    vf = reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(service).Elem().Interface()))
+    vf := reflect.VisibleFields(reflect.TypeOf(reflect.ValueOf(service).Elem().Interface()))
 
     for _, field := range vf {
         // Inject a service
