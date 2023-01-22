@@ -36,7 +36,6 @@ jobs:
           - os: ubuntu-latest
             go-build: ~/.cache/go-build
     name: ${{ matrix.os }} @ Go ${{ matrix.go }} ${{ matrix.test-tags }}
-    runs-on: ${{ matrix.os }}
     env:
       GO111MODULE: on
       TESTTAGS: ${{ matrix.test-tags }}
