@@ -16,7 +16,7 @@ type ContainerInterface interface {
      *
      * @return mixed Entry.
      */
-    Get(id string) *interface{}
+    Get(id string) *any
    
     /**
      * Returns true if the container can return an entry for the given identifier.
@@ -37,11 +37,11 @@ type Container struct {
     // Holds Service-Parameters
     ParameterBag *ParameterBag
     // Holds compiled Services with all Deps
-    Instances map[string]interface{}
+    Instances map[string]any
     //  Storage of object definitions.
     Definitions map[string]*Definition
     // Used to collect IDs of objects instantiated during build to detect circular references.
-    Building map[interface{}]bool
+    Building map[any]bool
     // Tags
     TaggedServices map[string][]string
 }
@@ -50,9 +50,9 @@ func NewContainer() *Container {
     container := &Container{}
     container.Compiled = false
     container.ParameterBag = NewParameterBag()
-    container.Instances = make(map[string]interface{})
+    container.Instances = make(map[string]any)
     container.Definitions = make(map[string]*Definition) 
-    container.Building = make(map[interface{}]bool)
+    container.Building = make(map[any]bool)
     container.TaggedServices = make(map[string][]string)
     return container
 }
@@ -60,20 +60,20 @@ func NewContainer() *Container {
 func (this *Container) AddParameter(name string, value string) {
 
     if this.Compiled {
-        panic("Container is allready compiled, you cant add Parameters interface{}more!")
+        panic("Container is allready compiled, you cant add Parameters anymore!")
     }
 
     this.ParameterBag.Set(name,value)
 }
 
-func (this *Container) Get(id string) interface{} {
+func (this *Container) Get(id string) any {
     if !this.Compiled {
         this.Compile()
     }   
     return this.getInternal(id)
 }
 
-func (this *Container) getInternal(id string) interface{} {
+func (this *Container) getInternal(id string) any {
     service,ok := this.Instances[id]
     if !ok {
         panic(fmt.Sprintf("Requested Service %s not found!",id))
@@ -83,7 +83,7 @@ func (this *Container) getInternal(id string) interface{} {
 
 func (this *Container) getDefinition(id string) *Definition {
     if this.Compiled {
-        panic("Container is allready compiled, you cant access Definitions interface{}more!")
+        panic("Container is allready compiled, you cant access Definitions anymore!")
     }
     definition,ok := this.Definitions[id]
     if !ok {
@@ -100,9 +100,9 @@ func (this *Container) Has(id string) bool {
     return ok
 }
 
-func (this *Container) Add(id string, service interface{}) *Definition {
+func (this *Container) Add(id string, service any) *Definition {
     if this.Compiled {
-        panic("Container is allready compiled, you cant add services interface{}more!")
+        panic("Container is allready compiled, you cant add services anymore!")
     }
     if reflect.TypeOf(service).Kind() != reflect.Pointer {
         panic(fmt.Sprintf("[%s] Unsupported Type! Please declare your Services as Pointer-Structs!",id))
@@ -118,7 +118,7 @@ func (this *Container) Compile() {
     this.Compiled = true
 }
 
-func (this *Container) build(def *Definition) interface{} {
+func (this *Container) build(def *Definition) any {
     service := def.Service
 
     for _,tag := range def.Tags {
@@ -164,12 +164,12 @@ func (this *Container) registerTag(id string, tag string) {
     this.TaggedServices[tag] = append(this.TaggedServices[tag],id);
 }
 
-func (this *Container) GetTaggedServices(tag string) ([]interface{},bool) {
+func (this *Container) GetTaggedServices(tag string) ([]any,bool) {
     ids,exist := this.TaggedServices[tag]
     if !exist {
         return nil,false
     }
-    var taggedServices []interface{}
+    var taggedServices []any
     for _,id := range ids {
         taggedServices = append(taggedServices,this.getInternal(id))
     }
