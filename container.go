@@ -44,6 +44,7 @@ type Container struct {
     Building map[any]bool
     // Tags
     TaggedServices map[string][]string
+    compilerPasses []func(c *Container)
 }
 
 func NewContainer() *Container {
@@ -111,11 +112,18 @@ func (this *Container) Add(id string, service any) *Definition {
     return this.Definitions[id]
 }
 
+func (this *Container) AddCompilerPass(cpfn func(c *Container)) {
+    this.compilerPasses = append(this.compilerPasses,cpfn)
+}
+
 func (this *Container) Compile() {
     for id,definition := range this.Definitions {
         this.Instances[id] = this.build(definition)
     }
     this.Compiled = true
+    for _,cpfn := range this.compilerPasses {
+        cpfn(this)
+    }
 }
 
 func (this *Container) build(def *Definition) any {

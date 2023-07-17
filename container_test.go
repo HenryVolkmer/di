@@ -10,13 +10,26 @@ const USERNAME = "JohnDoo"
 const PASSWORD = "123"
 
 type ServiceOneFixture struct {
-    ServiceTwoFixture *ServiceTwoFixture `service:"di/ServiceTwoFixture"` 
+    ServiceTwoFixture *ServiceTwoFixture `service:"di/ServiceTwoFixture"`
+    Strings []string
+}
+
+func (this *ServiceOneFixture) AddString(s string) {
+    this.Strings = append(this.Strings,s)
+}
+
+type StringAdder interface {
+    GetString() string
 }
 
 type ServiceTwoFixture struct {
     Username string `serviceparam:"username"`
     Password string `serviceparam:"password"`
 }
+func (this *ServiceTwoFixture) GetString() string {
+    return this.Username
+}
+
 
 type ServiceThreeFixture struct {
     Username string `serviceparam:"username"`
@@ -109,5 +122,34 @@ func TestServiceCanBeTagged(t *testing.T) {
     baz,_ := c.GetTaggedServices("baz")
     if baz != nil {
         t.Errorf("Amount of Tagged baz should be 0 but %d found!",len(bar))
+    }
+}
+
+func TestCompilerPass(t *testing.T) {
+    c := NewContainer()
+    c.AddParameter("username",USERNAME)
+    c.AddParameter("password",PASSWORD)
+    c.Add("di/ServiceOneFixture",&ServiceOneFixture{})
+    c.Add("di/ServiceTwoFixture",&ServiceTwoFixture{}).Tag("string.adder")
+    c.AddCompilerPass(func(c *Container) {
+        service,ok := c.Get("di/ServiceOneFixture").(*ServiceOneFixture)
+        if !ok {
+            t.Errorf("No di/ServiceOneFixture found!")
+            return
+        }
+        services,ok := c.GetTaggedServices("string.adder")
+        if !ok {
+            t.Errorf("No Services with tag string.adder found!")
+            return
+        }
+        for _,taggedservice := range services {
+            implTaggedService := taggedservice.(StringAdder)
+            service.AddString(implTaggedService.GetString())
+        }
+    })
+    c.Compile()
+    service := c.Get("di/ServiceOneFixture").(*ServiceOneFixture)
+    if len(service.Strings) != 1 {
+        t.Errorf("Compilerpass was not added!")
     }
 }
